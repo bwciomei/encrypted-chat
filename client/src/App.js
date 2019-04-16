@@ -1,14 +1,14 @@
 import React from 'react'
 import PropTypes from 'prop-types'
 import { ConnectedRouter } from 'connected-react-router'
-import { Route } from 'react-router'
+import { Route, Redirect } from 'react-router'
 import GlobalNav from './views/global-nav';
 import Chat from './views/chat';
 
 const App = ({ history }) => {
   return (
     <ConnectedRouter history={history}>
-        <Route path="/" component={GlobalNav}/>
+        <Route path='/' component={GlobalNav}/>
     </ConnectedRouter>
   )
 }

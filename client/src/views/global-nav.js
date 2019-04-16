@@ -1,6 +1,7 @@
 import React from 'react';
-import { Route, Switch } from 'react-router'
+import { Route } from 'react-router'
 import Dashboard from './dashboard';
+import Chat from './chat';
 import PropTypes from 'prop-types'
 import { withStyles } from '@material-ui/core/styles';
 import AppBar from '@material-ui/core/AppBar';
@@ -8,28 +9,28 @@ import Toolbar from '@material-ui/core/Toolbar';
 import Typography from '@material-ui/core/Typography';
 import Button from '@material-ui/core/Button';
 import IconButton from '@material-ui/core/IconButton';
-import axios from 'axios';
-import {getApiRoute, API_ROOT} from 'constants/api-constants';
+import axios from 'axios-instance';
+import {getApiRoute} from 'constants/api-constants';
 import { connect } from 'react-redux'
 import {loadSettings} from 'actions/session-actions';
-import {loadOnlineUsers, connectionChanged} from 'actions/chat-actions';
+import {loadDashboardData, connectionChanged} from 'actions/chat-actions';
 import AccountCircle from '@material-ui/icons/AccountCircle';
 import Avatar from '@material-ui/core/Avatar';
 import _ from 'lodash';
-// with ES6 import
-import io from 'socket.io-client';
+import socket from 'socket-instance';
 
 const styles = {
   root: {
     flexGrow: 1,
   },
-  grow: {
+  header: {
     flexGrow: 1,
+    cursor: 'pointer'
   },
   menuButton: {
     marginLeft: -12,
     marginRight: 20,
-  },
+  }
 };
 
 const mapStateToProps = (state) => {
@@ -43,8 +44,8 @@ const mapStateToProps = (state) => {
       loadSettings: (settings) => {
         dispatch(loadSettings(settings))
       },
-      loadOnlineUsers: (users) => {
-          dispatch(loadOnlineUsers(users));
+      loadDashboardData: (users, conversations) => {
+          dispatch(loadDashboardData(users, conversations));
       },
       connectionChanged: (connection) => {
           dispatch(connectionChanged(connection));
@@ -66,12 +67,8 @@ class GlobalNav extends React.PureComponent {
         loadSettings: PropTypes.func.isRequired,
         user: PropTypes.object,
         history: PropTypes.object.isRequired,
-        loadOnlineUsers: PropTypes.func.isRequired,
+        loadDashboardData: PropTypes.func.isRequired,
         connectionChanged: PropTypes.func.isRequired
-    }
-
-    loginClicked = () => {
-        window.location.href = getApiRoute('/auth/google');
     }
 
     componentDidMount() {
@@ -80,7 +77,10 @@ class GlobalNav extends React.PureComponent {
             return res.data;
         }).then(settings => {
             if (settings.user !== null) {
-                return axios.get(getApiRoute('/who'), {withCredentials: true})
+                return Promise.all([
+                  axios.get('/who'),
+                  axios.get('/conversations')
+                ]);
             } else {
                 return Promise.resolve(null);
             }
@@ -88,22 +88,28 @@ class GlobalNav extends React.PureComponent {
             if (res.data === null) {
                 return null;
             }
-            const userList = res.data;
-            this.props.loadOnlineUsers(userList);
-            this.props.history.push('/dashboard');
+            const userList = res[0].data;
+            const conversations = res[1].data;
+
+            this.props.loadDashboardData(userList, conversations);
         })
     }
 
     componentDidUpdate(prevProps, prevState) {
         if (prevProps.user === null && this.props.user !== null) {
-            const socket = io(API_ROOT);
+
             socket.on('CONNECTION_CHANGED', d => {
                 this.props.connectionChanged(d);
             })
-            this.setState({
-                socket: socket
-            });
         }
+    }
+
+    loginClicked = () => {
+      window.location.href = getApiRoute('/auth/google');
+    }
+
+    headerClicked = () => {
+      this.props.history.push('/');
     }
 
     render() {
@@ -113,10 +119,7 @@ class GlobalNav extends React.PureComponent {
             <div className={classes.root}>
             <AppBar position="static">
               <Toolbar>
-                {/*<IconButton className={classes.menuButton} color="inherit" aria-label="Menu">
-                  <MenuIcon />
-                </IconButton>*/}
-                <Typography variant="h6" color="inherit" className={classes.grow}>
+                <Typography variant="h6" color="inherit" className={classes.header} onClick={this.headerClicked}>
                   Encrypted-Chat
                 </Typography>
                 { _.isNil(user) ?
@@ -140,7 +143,8 @@ class GlobalNav extends React.PureComponent {
               </Toolbar>
             </AppBar>
 
-            <Route exact path='/dashboard' component={Dashboard} />
+            <Route exact path='/' component={Dashboard} />
+            <Route exact path='/chat/:id' component={Chat} />
           </div>
         );
     }

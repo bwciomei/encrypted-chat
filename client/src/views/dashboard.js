@@ -1,18 +1,8 @@
 import React from 'react';
-import { Route, Switch } from 'react-router'
 import PropTypes from 'prop-types'
 import { withStyles } from '@material-ui/core/styles';
-import AppBar from '@material-ui/core/AppBar';
-import Toolbar from '@material-ui/core/Toolbar';
 import Typography from '@material-ui/core/Typography';
-import Button from '@material-ui/core/Button';
-import IconButton from '@material-ui/core/IconButton';
-import axios from 'axios';
-import {getApiRoute, API_ROOT} from 'constants/api-constants';
 import { connect } from 'react-redux'
-import {loadSettings} from 'actions/session-actions';
-import {loadOnlineUsers} from 'actions/chat-actions';
-import AccountCircle from '@material-ui/icons/AccountCircle';
 import Avatar from '@material-ui/core/Avatar';
 import List from '@material-ui/core/List';
 import ListItem from '@material-ui/core/ListItem';
@@ -20,26 +10,118 @@ import ListItemAvatar from '@material-ui/core/ListItemAvatar';
 import _ from 'lodash';
 import CircularProgress from '@material-ui/core/CircularProgress';
 import ListItemText from '@material-ui/core/ListItemText';
+import Divider from '@material-ui/core/Divider';
+
+
+const styles = {
+  onlineAvatar: {
+    border: 'solid 3px green'
+  },
+  offlineAvatar: {
+    
+  },
+  row: {
+    cursor: 'pointer'
+  },
+  otherOnline: {
+    marginTop: '1rem'
+  }
+};
 
 const mapStateToProps = (state) => {
     return {
-      onlineUsers: state.chat.onlineUsers
+      onlineUsers: state.chat.onlineUsers,
+      conversations: state.chat.conversations,
+      session: state.session
     }
   }
+
+@withStyles(styles)
+@connect(mapStateToProps)
 class Dashboard extends React.PureComponent {
     static propTypes = {
-        onlineUsers: PropTypes.object
+        onlineUsers: PropTypes.object,
+        conversations: PropTypes.object,
+        session: PropTypes.object
     };
 
+    constructor(props) {
+      super(props);
+
+      this.state = {
+        conversations: null,
+        otherOnlineUsers: null
+      }
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+      if (prevProps.conversations !== this.props.conversations
+        || prevProps.onlineUsers !== this.props.onlineUsers) {
+          this.rebuildDashboardUsers();
+        }
+    }
+
+    rebuildDashboardUsers = () =>{
+      let {conversations, onlineUsers} = this.props;
+
+      if (conversations === null || onlineUsers === null) {
+        return;
+      }
+
+      conversations = Object.assign({}, conversations);
+      onlineUsers = Object.assign({}, onlineUsers);
+
+      _.forEach(conversations, convo => {
+        const userId = convo.from_user_id;
+        if (onlineUsers.hasOwnProperty(userId)) {
+          delete onlineUsers[userId];
+          convo.online = true;
+        } else {
+          convo.online = false;
+        }        
+      });
+
+      conversations = _.sortBy(conversations, c => c.display_name);
+      onlineUsers = _.sortBy(onlineUsers, u => u.display_name);
+
+      this.setState({
+        conversations,
+        otherOnlineUsers: onlineUsers
+      });
+    }
+
+
+    onConversationClick = userId => {
+      this.props.history.push(`/chat/${userId}`);
+    }
+
     render() {
-        const {onlineUsers} = this.props;
-        console.log(onlineUsers);
-        if (onlineUsers === null) {
+      if (_.isNil(this.props.session.user)) {
+        return <div>Please Login</div>
+      }
+
+        const {conversations, otherOnlineUsers, classes} = this.props;
+        if (otherOnlineUsers === null || conversations === null) {
             return <CircularProgress/>;
         } else {
-            return (<List>
-            { _.values(onlineUsers).map(u => 
-              <ListItem key={u.user_id}>
+            return (<div>
+              <List>
+            { _.values(conversations).map(u => 
+              <ListItem key={u.from_user_id} onClick={() => this.onConversationClick(u.from_user_id)} className={classes.row}>
+                <ListItemAvatar>
+                  <Avatar src={u.picture} className={u.online ? classes.onlineAvatar : classes.offlineAvatar}/>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={u.display_name}
+                />
+              </ListItem>
+            )
+            }
+            </List>
+            <Divider/>
+            <Typography variant='h4' className={classes.otherOnline}>Other Online Users</Typography>
+            { _.values(otherOnlineUsers).map(u => 
+              <ListItem key={u.user_id} onClick={() => this.onConversationClick(u.user_id)} className={classes.row}>
                 <ListItemAvatar>
                   <Avatar src={u.picture}/>
                 </ListItemAvatar>
@@ -49,9 +131,10 @@ class Dashboard extends React.PureComponent {
               </ListItem>
             )
             }
-            </List>)
+            
+            </div>)
         }
     }
 }
 
-export default connect(mapStateToProps, null)(Dashboard);
+export default Dashboard;

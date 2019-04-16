@@ -35,6 +35,7 @@
     "webpack-hot-middleware": "^2.24.3"
   },
   "dependencies": {
+    "@babel/plugin-proposal-decorators": "^7.4.0",
     "@material-ui/core": "^3.9.3",
     "@material-ui/icons": "^3.0.2",
     "axios": "^0.18.0",

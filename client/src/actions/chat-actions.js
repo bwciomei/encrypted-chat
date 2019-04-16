@@ -1,7 +1,8 @@
-export const loadOnlineUsers = (users) => {
+export const loadDashboardData = (users, conversations) => {
     return {
-        type: 'USERS_LOADED',
-        onlineUsers: users
+        type: 'DASHBOARD_DATA_LOADED',
+        onlineUsers: users,
+        conversations
     }
 }
 

@@ -2,9 +2,10 @@ import _ from 'lodash';
 
 const chatReducer = (state = initialState(), action) => {
     switch (action.type) {
-      case 'USERS_LOADED':
+      case 'DASHBOARD_DATA_LOADED':
         return {
-            onlineUsers: _.keyBy(action.onlineUsers, u => u.user_id)
+            onlineUsers: _.keyBy(action.onlineUsers, u => u.user_id),
+            conversations: _.keyBy(action.conversations, u => u.from_user_id)
         }
         case 'CONNECTION_CHANGED':
             const {connection} = action;
@@ -13,11 +14,13 @@ const chatReducer = (state = initialState(), action) => {
             if (connAction === 'CONNECTED') {             
                 onlineUsers[connection.user.user_id] = connection.user;
                 return {
+                    ...state,
                     onlineUsers: Object.assign({}, onlineUsers)
                 }
             } else if (connAction === 'DISCONNECTED') {
                 delete onlineUsers[connection.user.user_id];
                 return {
+                    ...state,
                     onlineUsers: Object.assign({}, onlineUsers)
                 }
             } else {

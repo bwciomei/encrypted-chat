@@ -80,16 +80,19 @@ const sessionMiddleware = session({
   }
 });
 
+app.use(require('body-parser').json() );
 app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
 
 const SOCKET_CONNECTIONS = "socket_connections";
+const SOCKET_CONNECTS_BY_USER = "socket_connections_usr";
 const CONNECTED = 'CONNECTED';
 const DISCONNECTED = 'DISCONNECTED';
 
 // We've restarted. Remove the open connections since they'll trigger a connected again anyway
 redisClient.del(SOCKET_CONNECTIONS);
+redisClient.del(SOCKET_CONNECTS_BY_USER);
 
 app.get('/auth/google',
   passport.authenticate('google', { scope: ['profile'] }));
@@ -113,7 +116,7 @@ app.get('/settings', function(req, res) {
     res.json({});
   } else {
     res.json({
-      user: _.pick(req.user, ['display_name', 'picture'])
+      user: _.pick(req.user, ['user_id', 'display_name', 'picture'])
     })
   }
 });
@@ -132,9 +135,44 @@ app.get('/who', async (req, res) => {
 });
 })
 
-app.get('/loggedInTest', ensureLoggedIn, (req, res) => {
-  res.send('logged in!');
+app.get('/conversations', ensureLoggedIn, async (req, res) => {
+  const result = await pool.query(`SELECT from_user_id, message, display_name, picture FROM (
+    SELECT from_user_id, message, row_number() OVER (PARTITION BY from_user_id ORDER BY sent_timestamp DESC) FROM messages
+    WHERE to_user_id=$1) latest_messages
+    INNER JOIN users
+    ON users.user_id=latest_messages.from_user_id
+    WHERE row_number=1`, [req.user.user_id]);
+
+    res.json(result.rows);
+})
+
+app.get('/messages/:userId', ensureLoggedIn, async (req, res) => {
+  const messages = pool.query(`SELECT message_id, from_user_id, to_user_id, sent_timestamp, received_timestamp, message
+                    FROM messages WHERE (from_user_id=$1 AND to_user_id=$2) OR (to_user_id=$1 AND from_user_id=$2)`,
+                    [req.params.userId, req.user.user_id]);
+
+  const userData = pool.query('SELECT user_id, display_name, picture FROM users WHERE user_id = ANY($1::int[])', 
+    [[req.params.userId, req.user.user_id]]);
+
+  const result = await Promise.all([messages, userData]);
+  res.json({
+    messages: result[0].rows,
+    userData: result[1].rows
+  });
 });
+
+app.post('/messages/:userId', ensureLoggedIn, async (req, res) => {
+  const {message} = req.body;
+  const inserted = await pool.query(`INSERT INTO messages (from_user_id, to_user_id, sent_timestamp, received_timestamp, message)
+  VALUES ($1, $2, NOW(), NOW(), $3)
+  RETURNING message_id, from_user_id, to_user_id, sent_timestamp, message`, 
+  [req.user.user_id, req.params.userId, message]);
+  
+  redisClient.publish('MESSAGE_RECEIVED', JSON.stringify(inserted.rows[0]), function() {
+    var ass = arguments;
+  });
+  res.end();
+})
 
 io.use(function(socket, next) {
   sessionMiddleware(socket.request, socket.request.res, next);
@@ -144,6 +182,7 @@ io.on('connection', async function(socket){
   const session = socket.request.session;
   console.log(`${session.passport.user} connected`);
   redisClient.hset(SOCKET_CONNECTIONS, socket.id, session.passport.user, redis.print);
+  redisClient.hset(`${SOCKET_CONNECTS_BY_USER}:${session.passport.user}`, socket.id, 1, redis.print);
 
   const result = await pool.query(`SELECT user_id, display_name, picture FROM users
     WHERE user_id = $1`,[session.passport.user]);
@@ -157,6 +196,7 @@ io.on('connection', async function(socket){
     const session = socket.request.session;
     console.log(`${session.passport.user} disconnected`);
     redisClient.hdel(SOCKET_CONNECTIONS, socket.id, redis.print);
+    redisClient.hdel(`${SOCKET_CONNECTS_BY_USER}:${session.passport.user}`, socket.id, redis.print);
   
     redisClient.publish("CONNECTION_CHANGED", JSON.stringify({
       action: DISCONNECTED,
@@ -179,10 +219,22 @@ const connectionListener = redis.createClient({
 connectionListener.on("message", function (channel, message) {
   if (channel === "CONNECTION_CHANGED") {
     io.emit("CONNECTION_CHANGED", JSON.parse(message));
+  } else if (channel === 'MESSAGE_RECEIVED') {
+    const data = JSON.parse(message);
+    redisClient.hkeys(`${SOCKET_CONNECTS_BY_USER}:${data.to_user_id}`, (err, replies) => {
+      const connected = io.sockets.connected;
+      _.forEach(replies, r => {
+        if (connected.hasOwnProperty(r)) {
+          connected[r].emit("message_received", JSON.parse(message));
+        }
+      })
+    })
+
   }
 });
 
 connectionListener.subscribe("CONNECTION_CHANGED");
+connectionListener.subscribe("MESSAGE_RECEIVED");
 
 http.listen(3000, function(){
   console.log('listening on *:3000');
