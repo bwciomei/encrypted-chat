@@ -56,7 +56,8 @@ function ensureLoggedIn(req, res, next) {
     if (req.session) {
       req.session.returnTo = req.originalUrl || req.url;
     }
-    return res.redirect('/auth/google');
+    return res.send('Not AUthenticated');
+    //return res.redirect('/auth/google');
   }
   next();
 }
@@ -64,7 +65,7 @@ function ensureLoggedIn(req, res, next) {
 if (!isProd) {
   app.use(require('cors')({
     origin: 'http://localhost:8080',
-    methods: ['GET','POST'],
+    methods: ['GET','POST', 'PUT'],
     credentials: true
   }));
 }
@@ -111,14 +112,19 @@ app.get('/', function(req, res){
   res.sendFile(__dirname + '/index.html');
 });
 
-app.get('/settings', function(req, res) {
+app.get('/settings', async function(req, res) {
   if (!req.isAuthenticated || !req.isAuthenticated()) {
     res.json({});
   } else {
-    res.json({
-      user: _.pick(req.user, ['user_id', 'display_name', 'picture'])
-    })
-  }
+      const keyQuery = await pool.query('SELECT key_guid, public_key FROM keys WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1',
+      [req.user.user_id]);
+
+      const key = keyQuery.rows.length > 0 ? keyQuery.rows[0] : null;
+        res.json({
+        user: _.pick(req.user, ['user_id', 'display_name', 'picture']),
+        publicKey: key
+        })
+    }
 });
 
 app.get('/who', async (req, res) => {
@@ -147,7 +153,8 @@ app.get('/conversations', ensureLoggedIn, async (req, res) => {
 })
 
 app.get('/messages/:userId', ensureLoggedIn, async (req, res) => {
-  const messages = pool.query(`SELECT message_id, from_user_id, to_user_id, sent_timestamp, received_timestamp, message
+  const messages = pool.query(`SELECT message_id, from_user_id, to_user_id, sent_timestamp, 
+                    received_timestamp, message, to_key_guid, from_message, from_key_guid
                     FROM messages WHERE (from_user_id=$1 AND to_user_id=$2) OR (to_user_id=$1 AND from_user_id=$2)`,
                     [req.params.userId, req.user.user_id]);
 
@@ -162,17 +169,54 @@ app.get('/messages/:userId', ensureLoggedIn, async (req, res) => {
 });
 
 app.post('/messages/:userId', ensureLoggedIn, async (req, res) => {
-  const {message} = req.body;
-  const inserted = await pool.query(`INSERT INTO messages (from_user_id, to_user_id, sent_timestamp, received_timestamp, message)
-  VALUES ($1, $2, NOW(), NOW(), $3)
-  RETURNING message_id, from_user_id, to_user_id, sent_timestamp, message`, 
-  [req.user.user_id, req.params.userId, message]);
+  const {message, keyGuid, fromMessage, fromKeyGuid} = req.body;
+  const inserted = await pool.query(`INSERT INTO messages (from_user_id, to_user_id, sent_timestamp, received_timestamp, message, to_key_guid, from_message, from_key_guid)
+  VALUES ($1, $2, NOW(), NOW(), $3, $4, $5, $6)
+  RETURNING message_id, from_user_id, to_user_id, sent_timestamp, message, to_key_guid, from_message, from_key_guid`, 
+  [req.user.user_id, req.params.userId, message, keyGuid, fromMessage, fromKeyGuid]);
   
   redisClient.publish('MESSAGE_RECEIVED', JSON.stringify(inserted.rows[0]), function() {
     var ass = arguments;
   });
   res.end();
 })
+
+app.put('/public-keys', ensureLoggedIn, async (req, res) => {
+    await pool.query('INSERT INTO keys (key_guid, user_id, public_key) values ($1, $2, $3)',
+    [req.body.uuid, req.user.user_id, req.body.key]);
+    res.end();
+})
+
+app.get('/public-keys/:userId', ensureLoggedIn, async (req, res) => {
+    const keyQuery = await pool.query('SELECT key_guid, public_key FROM keys WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1',
+    [req.params.userId]);
+
+    const key = keyQuery.rows.length > 0 ? keyQuery.rows[0] : null;
+
+    res.json({
+        key
+    });
+})
+
+var multer  = require('multer')
+var upload = multer()
+
+app.post('/bin', upload.single('file'), async (req, res) => {
+  console.log(req.file);
+  const result = await pool.query('INSERT INTO bintest (bin) VALUES ($1) RETURNING bin', [req.file.buffer]);
+  res.type('application/octet-stream');
+  res.end(result.rows[0].bin.toString('base64'));
+  return;
+  const d = result.rows[0].bin;
+
+  res.writeHead(200, {
+    'Content-Type': 'application/octet-stream',
+    'Content-disposition': 'attachment;filename=' + filename,
+    'Content-Length': d.length
+});
+var b = new Buffer(d, 'binary');
+res.end(b);
+});
 
 io.use(function(socket, next) {
   sessionMiddleware(socket.request, socket.request.res, next);

@@ -4,8 +4,9 @@ const chatReducer = (state = initialState(), action) => {
     switch (action.type) {
       case 'DASHBOARD_DATA_LOADED':
         return {
+            ...state,
             onlineUsers: _.keyBy(action.onlineUsers, u => u.user_id),
-            conversations: _.keyBy(action.conversations, u => u.from_user_id)
+            conversations: _.keyBy(action.conversations, u => u.from_user_id),
         }
         case 'CONNECTION_CHANGED':
             const {connection} = action;
@@ -25,6 +26,11 @@ const chatReducer = (state = initialState(), action) => {
                 }
             } else {
                 throw new Error("Unknown connection change " + action)
+            }
+        case 'KEYS_LOADED':
+            return {
+                ...state,
+                keys: action.keys
             }
       default:
         return state;

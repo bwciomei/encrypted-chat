@@ -12,3 +12,14 @@ export const connectionChanged = (connection) => {
         connection
     }
 }
+
+export const keysLoaded = (uuid, privateKey, publicKey) => {
+    return {
+        type: 'KEYS_LOADED',
+        keys: {
+            uuid,
+            privateKey,
+            publicKey
+        }
+    }
+}

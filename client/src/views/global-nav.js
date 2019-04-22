@@ -13,11 +13,13 @@ import axios from 'axios-instance';
 import {getApiRoute} from 'constants/api-constants';
 import { connect } from 'react-redux'
 import {loadSettings} from 'actions/session-actions';
-import {loadDashboardData, connectionChanged} from 'actions/chat-actions';
+import {loadDashboardData, connectionChanged, keysLoaded} from 'actions/chat-actions';
 import AccountCircle from '@material-ui/icons/AccountCircle';
 import Avatar from '@material-ui/core/Avatar';
 import _ from 'lodash';
 import socket from 'socket-instance';
+import * as keyUtils from 'key-utils';
+import uuidv4 from 'uuid/v4'
 
 const styles = {
   root: {
@@ -49,7 +51,10 @@ const mapStateToProps = (state) => {
       },
       connectionChanged: (connection) => {
           dispatch(connectionChanged(connection));
-      }
+      },
+      keysLoaded: (uuid, privateKey, publicKey) => {
+          dispatch(keysLoaded(uuid, privateKey, publicKey));
+      },
     }
   }
 
@@ -58,7 +63,8 @@ class GlobalNav extends React.PureComponent {
         super(props);
 
         this.state = {
-            socket: null
+            socket: null,
+            loaded: false
         };
     }
 
@@ -68,18 +74,57 @@ class GlobalNav extends React.PureComponent {
         user: PropTypes.object,
         history: PropTypes.object.isRequired,
         loadDashboardData: PropTypes.func.isRequired,
-        connectionChanged: PropTypes.func.isRequired
+        connectionChanged: PropTypes.func.isRequired,
+        keysLoaded: PropTypes.func.isRequired
     }
 
+    initKeys(existingPublicKey) {
+        const storedKey = keyUtils.getPrivateKey();
+        if (_.isNil(storedKey) || storedKey.uuid !== existingPublicKey.key_guid) {
+            const uuid = uuidv4();
+            console.log('Generating new key!');
+            return keyUtils.generateKeys()
+            .then(keys => {
+                this.props.keysLoaded(uuid, keys.privateKey, keys.publicKey);
+
+                return Promise.all([
+                    keyUtils.exportPrivateKey(keys.privateKey),
+                    keyUtils.exportPublicKey(keys.publicKey)
+                ])
+            })
+            .then(keyStrings => {
+                keyUtils.setPrivateKey(uuid, keyUtils.stringifyPrivateKey(keyStrings[0]));
+
+                return axios.put('/public-keys', {
+                    key: keyUtils.stringifyPublicKey(keyStrings[1]),
+                    uuid
+                })
+            });
+        } else {
+            return Promise.all(
+                [
+                    keyUtils.importPrivateKey(storedKey.pemString),
+                    keyUtils.importPublicKey(existingPublicKey.public_key)
+                ]
+            )
+            .then(keys => {
+                this.props.keysLoaded(storedKey.uuid, keys[0], keys[1]);
+            });
+        }
+    }
+        
+    
     componentDidMount() {
-        axios.get(getApiRoute('/settings'), {withCredentials: true}).then(res => {
+        axios.get('/settings').then(res => {
             this.props.loadSettings(res.data);
             return res.data;
         }).then(settings => {
             if (settings.user !== null) {
+                socket.open();
                 return Promise.all([
                   axios.get('/who'),
-                  axios.get('/conversations')
+                  axios.get('/conversations'),
+                  this.initKeys(settings.publicKey)
                 ]);
             } else {
                 return Promise.resolve(null);
@@ -92,6 +137,9 @@ class GlobalNav extends React.PureComponent {
             const conversations = res[1].data;
 
             this.props.loadDashboardData(userList, conversations);
+            this.setState({
+                loaded: true
+            })
         })
     }
 
@@ -114,7 +162,11 @@ class GlobalNav extends React.PureComponent {
 
     render() {
         const {classes, user} = this.props;
-        console.log('global nav render');
+        const {loaded} = this.state;
+
+        if (!loaded) {
+            return <div>Loading...</div>;
+        }
         return (
             <div className={classes.root}>
             <AppBar position="static">

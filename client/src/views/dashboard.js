@@ -90,6 +90,9 @@ class Dashboard extends React.PureComponent {
       });
     }
 
+    componentDidMount() {
+        this.rebuildDashboardUsers();
+    }
 
     onConversationClick = userId => {
       this.props.history.push(`/chat/${userId}`);
