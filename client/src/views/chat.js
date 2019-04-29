@@ -7,10 +7,9 @@ import CircularProgress from '@material-ui/core/CircularProgress';
 import { withStyles } from '@material-ui/core/styles';
 import TextField from '@material-ui/core/TextField';
 import socket from 'socket-instance';
-import DialogTitle from '@material-ui/core/DialogTitle';
-import Dialog from '@material-ui/core/Dialog';
-import Button from '@material-ui/core/Button';
 import * as keyUtils from 'key-utils';
+import PropTypes from 'prop-types';
+import _ from 'lodash';
 
 function decryptMessages(result, privateKey) {
     const messages = result.data.messages;
@@ -45,15 +44,16 @@ function decryptMessage(message, keys) {
         ).then(decrypted => {
             message.decrypted = new TextDecoder().decode(decrypted);
             return message;
-        }).catch(err => {
-            console.log("error decrpytping");
+        }).catch(() => {
+            // eslint-disable-next-line no-console
+            console.error("error decrypting");
             message.decrypted = "Error decrypting";
             return message;
         })
     
 }
 
-const styles = theme => ({
+const styles = () => ({
     messageRow: {
         display: 'flex',
         flexDirection: 'row-reverse',
@@ -94,6 +94,12 @@ const mapStateToProps = state => ({
 @withStyles(styles)
 @connect(mapStateToProps)
 class Chat extends React.PureComponent {
+    static propTypes = {
+        match: PropTypes.object,
+        chat: PropTypes.object,
+        session: PropTypes.object,
+        classes: PropTypes.object
+    }
     constructor(props) {
         super(props);
 

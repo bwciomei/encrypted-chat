@@ -82,6 +82,8 @@ class GlobalNav extends React.PureComponent {
         const storedKey = keyUtils.getPrivateKey();
         if (_.isNil(storedKey) || (!_.isNil(existingPublicKey) && storedKey.uuid !== existingPublicKey.key_guid)) {
             const uuid = uuidv4();
+
+            // eslint-disable-next-line no-console
             console.log('Generating new key!');
             return keyUtils.generateKeys()
             .then(keys => {
@@ -144,7 +146,7 @@ class GlobalNav extends React.PureComponent {
         })
     }
 
-    componentDidUpdate(prevProps, prevState) {
+    componentDidUpdate(prevProps) {
         if (prevProps.user === null && this.props.user !== null) {
 
             socket.on('CONNECTION_CHANGED', d => {

@@ -42,7 +42,10 @@ class Dashboard extends React.PureComponent {
     static propTypes = {
         onlineUsers: PropTypes.object,
         conversations: PropTypes.object,
-        session: PropTypes.object
+        session: PropTypes.object,
+        history: PropTypes.object,
+        otherOnlineUsers: PropTypes.list,
+        classes: PropTypes.object
     };
 
     constructor(props) {
@@ -54,7 +57,7 @@ class Dashboard extends React.PureComponent {
       }
     }
 
-    componentDidUpdate(prevProps, prevState) {
+    componentDidUpdate(prevProps) {
       if (prevProps.conversations !== this.props.conversations
         || prevProps.onlineUsers !== this.props.onlineUsers) {
           this.rebuildDashboardUsers();
