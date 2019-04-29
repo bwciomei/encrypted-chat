@@ -56,7 +56,7 @@ function ensureLoggedIn(req, res, next) {
     if (req.session) {
       req.session.returnTo = req.originalUrl || req.url;
     }
-    return res.send('Not AUthenticated');
+    return res.status(401).send('Not Authenticated');
     //return res.redirect('/auth/google');
   }
   next();
@@ -197,26 +197,6 @@ app.get('/public-keys/:userId', ensureLoggedIn, async (req, res) => {
         key
     });
 })
-
-var multer  = require('multer')
-var upload = multer()
-
-app.post('/bin', upload.single('file'), async (req, res) => {
-  console.log(req.file);
-  const result = await pool.query('INSERT INTO bintest (bin) VALUES ($1) RETURNING bin', [req.file.buffer]);
-  res.type('application/octet-stream');
-  res.end(result.rows[0].bin.toString('base64'));
-  return;
-  const d = result.rows[0].bin;
-
-  res.writeHead(200, {
-    'Content-Type': 'application/octet-stream',
-    'Content-disposition': 'attachment;filename=' + filename,
-    'Content-Length': d.length
-});
-var b = new Buffer(d, 'binary');
-res.end(b);
-});
 
 io.use(function(socket, next) {
   sessionMiddleware(socket.request, socket.request.res, next);

@@ -80,7 +80,7 @@ class GlobalNav extends React.PureComponent {
 
     initKeys(existingPublicKey) {
         const storedKey = keyUtils.getPrivateKey();
-        if (_.isNil(storedKey) || storedKey.uuid !== existingPublicKey.key_guid) {
+        if (_.isNil(storedKey) || (!_.isNil(existingPublicKey) && storedKey.uuid !== existingPublicKey.key_guid)) {
             const uuid = uuidv4();
             console.log('Generating new key!');
             return keyUtils.generateKeys()
@@ -119,7 +119,7 @@ class GlobalNav extends React.PureComponent {
             this.props.loadSettings(res.data);
             return res.data;
         }).then(settings => {
-            if (settings.user !== null) {
+            if (!_.isNil(settings.user)) {
                 socket.open();
                 return Promise.all([
                   axios.get('/who'),
@@ -130,13 +130,14 @@ class GlobalNav extends React.PureComponent {
                 return Promise.resolve(null);
             }
         }).then(res => {
-            if (res.data === null) {
+            if (_.isNil(res)) {
                 return null;
             }
             const userList = res[0].data;
             const conversations = res[1].data;
 
             this.props.loadDashboardData(userList, conversations);
+        }).finally(() => {
             this.setState({
                 loaded: true
             })
