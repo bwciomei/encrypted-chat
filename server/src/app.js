@@ -4,7 +4,9 @@ if (!isProd) {
   require('dotenv').config();
 }
 
-var app = require('express')();
+var path = require('path');
+var express = require('express');
+var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 const { Pool } = require('pg')
@@ -86,6 +88,12 @@ app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Serve webpack junk
+app.use(express.static(path.join(__dirname, '../dist')));
+app.get('/', function(req, res) {
+  res.sendFile(path.join(__dirname, '../dist', 'index.html'));
+});
+
 const SOCKET_CONNECTIONS = "socket_connections";
 const SOCKET_CONNECTS_BY_USER = "socket_connections_usr";
 const CONNECTED = 'CONNECTED';
@@ -108,10 +116,6 @@ app.get('/auth/google/callback',
     }
   });
 
-app.get('/', function(req, res){
-  res.sendFile(__dirname + '/index.html');
-});
-
 app.get('/settings', async function(req, res) {
   if (!req.isAuthenticated || !req.isAuthenticated()) {
     res.json({});
@@ -129,11 +133,6 @@ app.get('/settings', async function(req, res) {
 
 app.get('/who', async (req, res) => {
   redisClient.hvals(SOCKET_CONNECTIONS, async function (err, replies) {
-    console.log(replies.length + " replies:");
-    replies.forEach(function (reply, i) {
-        console.log("    " + i + ": " + reply);
-    });
-
     const result = await pool.query(`SELECT user_id, display_name, picture FROM users
     WHERE user_id = ANY($1::int[])`,[replies]);
 

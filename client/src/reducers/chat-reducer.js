@@ -1,10 +1,8 @@
 import _ from 'lodash';
 
 const chatReducer = (state = initialState(), action) => {
-    const {connection} = action;
-    const connAction = connection.action;
-    let onlineUsers = state.onlineUsers; 
-    
+
+
     switch (action.type) {
       case 'DASHBOARD_DATA_LOADED':
         return {
@@ -12,7 +10,10 @@ const chatReducer = (state = initialState(), action) => {
             onlineUsers: _.keyBy(action.onlineUsers, u => u.user_id),
             conversations: _.keyBy(action.conversations, u => u.from_user_id),
         }
-        case 'CONNECTION_CHANGED':
+        case 'CONNECTION_CHANGED': {
+            const {connection} = action;
+            const connAction = connection.action;
+            let onlineUsers = state.onlineUsers; 
             if (connAction === 'CONNECTED') {             
                 onlineUsers[connection.user.user_id] = connection.user;
                 return {
@@ -28,6 +29,7 @@ const chatReducer = (state = initialState(), action) => {
             } else {
                 throw new Error("Unknown connection change " + action)
             }
+        }
         case 'KEYS_LOADED':
             return {
                 ...state,

@@ -14,27 +14,27 @@ import Divider from '@material-ui/core/Divider';
 
 
 const styles = {
-  onlineAvatar: {
-    border: 'solid 3px green'
-  },
-  offlineAvatar: {
-    
-  },
-  row: {
-    cursor: 'pointer'
-  },
-  otherOnline: {
-    marginTop: '1rem'
-  }
+    onlineAvatar: {
+        border: 'solid 3px green'
+    },
+    offlineAvatar: {
+
+    },
+    row: {
+        cursor: 'pointer'
+    },
+    otherOnline: {
+        marginTop: '1rem'
+    }
 };
 
 const mapStateToProps = (state) => {
     return {
-      onlineUsers: state.chat.onlineUsers,
-      conversations: state.chat.conversations,
-      session: state.session
+        onlineUsers: state.chat.onlineUsers,
+        conversations: state.chat.conversations,
+        session: state.session
     }
-  }
+}
 
 @withStyles(styles)
 @connect(mapStateToProps)
@@ -44,53 +44,54 @@ class Dashboard extends React.PureComponent {
         conversations: PropTypes.object,
         session: PropTypes.object,
         history: PropTypes.object,
-        otherOnlineUsers: PropTypes.list,
         classes: PropTypes.object
     };
 
     constructor(props) {
-      super(props);
+        super(props);
 
-      this.state = {
-        conversations: null,
-        otherOnlineUsers: null
-      }
-    }
-
-    componentDidUpdate(prevProps) {
-      if (prevProps.conversations !== this.props.conversations
-        || prevProps.onlineUsers !== this.props.onlineUsers) {
-          this.rebuildDashboardUsers();
+        this.state = {
+            conversations: null,
+            otherOnlineUsers: null
         }
     }
 
-    rebuildDashboardUsers = () =>{
-      let {conversations, onlineUsers} = this.props;
+    componentDidUpdate(prevProps) {
+        if (prevProps.conversations !== this.props.conversations
+            || prevProps.onlineUsers !== this.props.onlineUsers) {
+            this.rebuildDashboardUsers();
+        }
+    }
 
-      if (conversations === null || onlineUsers === null) {
-        return;
-      }
+    rebuildDashboardUsers = () => {
+        let { conversations, onlineUsers } = this.props;
 
-      conversations = Object.assign({}, conversations);
-      onlineUsers = Object.assign({}, onlineUsers);
+        if (conversations === null || onlineUsers === null) {
+            return;
+        }
 
-      _.forEach(conversations, convo => {
-        const userId = convo.from_user_id;
-        if (onlineUsers.hasOwnProperty(userId)) {
-          delete onlineUsers[userId];
-          convo.online = true;
-        } else {
-          convo.online = false;
-        }        
-      });
+        conversations = Object.assign({}, conversations);
+        onlineUsers = Object.assign({}, onlineUsers);
 
-      conversations = _.sortBy(conversations, c => c.display_name);
-      onlineUsers = _.sortBy(onlineUsers, u => u.display_name);
+        _.forEach(conversations, convo => {
+            const userId = convo.from_user_id;
+            if (onlineUsers.hasOwnProperty(userId)) {
+                delete onlineUsers[userId];
+                convo.online = true;
+            } else {
+                convo.online = false;
+            }
+        });
 
-      this.setState({
-        conversations,
-        otherOnlineUsers: onlineUsers
-      });
+        conversations = _.sortBy(conversations, c => c.display_name);
+        onlineUsers = _.sortBy(
+            _.filter(onlineUsers, u => u.user_id !== this.props.session.user.user_id),
+            u => u.display_name);
+
+        this.setState({
+            conversations,
+            otherOnlineUsers: onlineUsers
+        });
     }
 
     componentDidMount() {
@@ -98,46 +99,50 @@ class Dashboard extends React.PureComponent {
     }
 
     onConversationClick = userId => {
-      this.props.history.push(`/chat/${userId}`);
+        this.props.history.push(`/chat/${userId}`);
     }
 
     render() {
-      if (_.isNil(this.props.session.user)) {
-        return <div>Please Login</div>
-      }
+        if (_.isNil(this.props.session.user)) {
+            return <div>Please Login</div>
+        }
 
-        const {conversations, otherOnlineUsers, classes} = this.props;
+        const { otherOnlineUsers, conversations } = this.state;
+        const { classes } = this.props;
         if (otherOnlineUsers === null || conversations === null) {
-            return <CircularProgress/>;
+            return <CircularProgress />;
         } else {
             return (<div>
-              <List>
-            { _.values(conversations).map(u => 
-              <ListItem key={u.from_user_id} onClick={() => this.onConversationClick(u.from_user_id)} className={classes.row}>
-                <ListItemAvatar>
-                  <Avatar src={u.picture} className={u.online ? classes.onlineAvatar : classes.offlineAvatar}/>
-                </ListItemAvatar>
-                <ListItemText
-                  primary={u.display_name}
-                />
-              </ListItem>
-            )
-            }
-            </List>
-            <Divider/>
-            <Typography variant='h4' className={classes.otherOnline}>Other Online Users</Typography>
-            { _.values(otherOnlineUsers).map(u => 
-              <ListItem key={u.user_id} onClick={() => this.onConversationClick(u.user_id)} className={classes.row}>
-                <ListItemAvatar>
-                  <Avatar src={u.picture}/>
-                </ListItemAvatar>
-                <ListItemText
-                  primary={u.display_name}
-                />
-              </ListItem>
-            )
-            }
-            
+                <List>
+                    {_.values(conversations).map(u =>
+                        <ListItem key={u.from_user_id} onClick={() => this.onConversationClick(u.from_user_id)} className={classes.row}>
+                            <ListItemAvatar>
+                                <Avatar src={u.picture} className={u.online ? classes.onlineAvatar : classes.offlineAvatar} />
+                            </ListItemAvatar>
+                            <ListItemText
+                                primary={u.display_name}
+                            />
+                        </ListItem>
+                    )
+                    }
+                </List>
+                { otherOnlineUsers.size > 0 &&
+                    <React.Fragment>
+                        <Divider />
+                        <Typography variant='h4' className={classes.otherOnline}>Other Online Users</Typography>
+                        {_.values(otherOnlineUsers).map(u =>
+                            <ListItem key={u.user_id} onClick={() => this.onConversationClick(u.user_id)} className={classes.row}>
+                                <ListItemAvatar>
+                                    <Avatar src={u.picture} />
+                                </ListItemAvatar>
+                                <ListItemText
+                                    primary={u.display_name}
+                                />
+                            </ListItem>
+                        )
+                        }
+                    </React.Fragment>
+                }
             </div>)
         }
     }
